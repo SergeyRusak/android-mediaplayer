@@ -8,7 +8,9 @@ import android.media.MediaPlayer
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 
@@ -17,6 +19,10 @@ class MainActivity : AppCompatActivity() {
     val m = MediaPlayer()
     private lateinit var playButton: Button
     private var isPlay = false
+    var firstTime = true
+
+    private lateinit var statusObserver: Observer<Boolean>
+    private val model: MyViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,8 +37,10 @@ class MainActivity : AppCompatActivity() {
         afd.close()
         m.prepare()
 
+        MyViewModel.currentLength.value = m.duration
+
         playButton.setOnClickListener{
-           switch()
+            MyViewModel.currentStatus.value = !isPlaying
         }
 
         goToButton.setOnClickListener{
@@ -41,35 +49,38 @@ class MainActivity : AppCompatActivity() {
 
         Thread {
             while (true) {
-                val intent = Intent("player_condition")
-                intent.putExtra("isPlay", isPlaying)
-                intent.putExtra("played", m.currentPosition)
-                intent.putExtra("length", m.duration)
-                LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-                Log.d("mylog", "Sending broadcast: ${m.currentPosition} / ${m.duration}")
+                MyViewModel.currentPosition.postValue(m.currentPosition)
+                if (MyViewModel.currentStatus.value!! != isPlaying){
+                    isPlaying = MyViewModel.currentStatus.value!!
+                    if (isPlaying){
+                        m.start()
+                    }
+                    else{
+                        m.pause()
+                    }
+                }
+
                 Thread.sleep(1000)
             }
         }.start()
-
-        val lbm = LocalBroadcastManager.getInstance(this)
-        lbm.registerReceiver(receiver, IntentFilter("switch_player"))
-    }
-
-    var receiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            switch()
+        statusObserver = Observer<Boolean>{
+                newStatus ->
+            isPlaying = newStatus
+            if (firstTime){
+                firstTime = false
+                Log.d("mylog", "OBSERVER created")
+                return@Observer
+            }
+            if (isPlaying) {
+                playButton.text = "Pause"
+                m.start()
+            }else{
+                playButton.text = "Play"
+                m.pause()
+            }
+            Log.d("mylog", "OBSERVER: ${isPlaying}")
         }
-    }
 
-    fun switch(){
-        isPlaying = !isPlaying
-        if (isPlaying){
-            playButton.text = "Pause"
-            m.start()
-        }
-        else{
-            playButton.text = "Play"
-            m.pause()
-        }
+        MyViewModel.getStatusSingleton().observe(this, statusObserver)
     }
 }

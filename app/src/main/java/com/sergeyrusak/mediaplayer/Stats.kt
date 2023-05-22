@@ -5,10 +5,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.util.Log
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 
@@ -21,6 +24,7 @@ class Stats : AppCompatActivity() {
     private lateinit var playBtn: Button
     private lateinit var backbtn: Button
 
+    private val model: MyViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,28 +35,18 @@ class Stats : AppCompatActivity() {
         textView = findViewById<TextView>(R.id.textView)
 
         playBtn.setOnClickListener{
-            val intent = Intent("switch_player")
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+            MyViewModel.currentStatus.value= !MyViewModel.currentStatus.value!!
+            Log.d("mylog", "${MyViewModel.currentStatus.value}")
+
         }
         backbtn.setOnClickListener{
             startActivity(Intent(this, MainActivity::class.java))
         }
 
-        val lbm = LocalBroadcastManager.getInstance(this)
-        lbm.registerReceiver(receiver, IntentFilter("player_condition"))
-    }
 
-    var receiver: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            isPlaying = intent.getBooleanExtra("isPlay", false)
-            length = intent.getIntExtra("length", 0)
-            played = intent.getIntExtra("played", 0)
-
-            progressBar.max = length
-            progressBar.progress = played
-
-            textView.text = "${played/60000}:${played/1000%60}/${length/60000}:${length/1000%60}"
-
+        val statusObserver = Observer<Boolean>{
+                newStatus ->
+            isPlaying = newStatus
             if (isPlaying){
                 playBtn.text = "Pause"
             }
@@ -60,5 +54,23 @@ class Stats : AppCompatActivity() {
                 playBtn.text = "Play"
             }
         }
+        MyViewModel.getStatusSingleton().observe(this, statusObserver)
+
+        val lengthObserver = Observer<Int>{
+                newLength ->
+            length = newLength
+            textView.text = "${played/60000}:${played/1000%60}/${length/60000}:${length/1000%60}"
+            progressBar.max = length
+        }
+        MyViewModel.getLengthSingleton().observe(this, lengthObserver)
+
+        val positionObserver = Observer<Int>{
+                newPos ->
+            played = newPos
+            textView.text = "${played/60000}:${played/1000%60}/${length/60000}:${length/1000%60}"
+            progressBar.progress = played
+        }
+        MyViewModel.getPositionSingleton().observe(this, positionObserver)
+
     }
 }
